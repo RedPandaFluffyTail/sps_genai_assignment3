@@ -1,12 +1,10 @@
-import torch
 import torch.nn as nn
 
 
 class Assignment2CNN(nn.Module):
     """
-    CNN architecture required by Assignment 2.
-
-    Input: RGB image of size 64x64x3
+    CNN architecture from Assignment 2.
+    Kept here so the previous /predict endpoint can still work.
     """
 
     def __init__(self):
@@ -49,13 +47,17 @@ class Assignment2CNN(nn.Module):
 
 class Generator(nn.Module):
     """
-    GAN Generator for MNIST.
+    Assignment 3 GAN Generator.
 
-    Input:
-        random noise vector of shape (batch_size, latent_dim)
-
-    Output:
-        generated image of shape (batch_size, 1, 28, 28)
+    Required architecture:
+    - Input: noise vector of shape (batch_size, 100)
+    - Fully connected layer to 7 x 7 x 128, then reshape
+    - ConvTranspose2D: 128 -> 64, kernel size 4, stride 2, padding 1
+      Output size: 14 x 14
+      Followed by BatchNorm2D and ReLU
+    - ConvTranspose2D: 64 -> 1, kernel size 4, stride 2, padding 1
+      Output size: 28 x 28
+      Followed by Tanh activation
     """
 
     def __init__(self, latent_dim=100):
@@ -63,23 +65,9 @@ class Generator(nn.Module):
 
         self.latent_dim = latent_dim
 
-        self.model = nn.Sequential(
-            nn.Linear(latent_dim, 256 * 7 * 7),
-            nn.BatchNorm1d(256 * 7 * 7),
-            nn.LeakyReLU(0.2, inplace=True),
+        self.fc = nn.Linear(latent_dim, 7 * 7 * 128)
 
-            nn.Unflatten(1, (256, 7, 7)),
-
-            nn.ConvTranspose2d(
-                in_channels=256,
-                out_channels=128,
-                kernel_size=4,
-                stride=2,
-                padding=1,
-            ),
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2, inplace=True),
-
+        self.generator = nn.Sequential(
             nn.ConvTranspose2d(
                 in_channels=128,
                 out_channels=64,
@@ -88,37 +76,45 @@ class Generator(nn.Module):
                 padding=1,
             ),
             nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(),
 
-            nn.Conv2d(
+            nn.ConvTranspose2d(
                 in_channels=64,
                 out_channels=1,
-                kernel_size=3,
-                stride=1,
+                kernel_size=4,
+                stride=2,
                 padding=1,
             ),
             nn.Tanh(),
         )
 
     def forward(self, z):
-        return self.model(z)
+        x = self.fc(z)
+        x = x.view(z.size(0), 128, 7, 7)
+        x = self.generator(x)
+        return x
 
 
 class Discriminator(nn.Module):
     """
-    GAN Discriminator for MNIST.
+    Assignment 3 GAN Discriminator.
 
-    Input:
-        image of shape (batch_size, 1, 28, 28)
-
-    Output:
-        probability of image being real, shape (batch_size, 1)
+    Required architecture:
+    - Input: image of shape (1, 28, 28)
+    - Conv2D: 1 -> 64, kernel size 4, stride 2, padding 1
+      Output size: 14 x 14
+      Followed by LeakyReLU(0.2)
+    - Conv2D: 64 -> 128, kernel size 4, stride 2, padding 1
+      Output size: 7 x 7
+      Followed by BatchNorm2D and LeakyReLU(0.2)
+    - Flatten
+    - Linear layer to get a single real/fake probability
     """
 
     def __init__(self):
         super().__init__()
 
-        self.model = nn.Sequential(
+        self.discriminator = nn.Sequential(
             nn.Conv2d(
                 in_channels=1,
                 out_channels=64,
@@ -126,8 +122,7 @@ class Discriminator(nn.Module):
                 stride=2,
                 padding=1,
             ),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout2d(0.25),
+            nn.LeakyReLU(0.2),
 
             nn.Conv2d(
                 in_channels=64,
@@ -137,8 +132,7 @@ class Discriminator(nn.Module):
                 padding=1,
             ),
             nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout2d(0.25),
+            nn.LeakyReLU(0.2),
 
             nn.Flatten(),
             nn.Linear(128 * 7 * 7, 1),
@@ -146,7 +140,7 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, img):
-        return self.model(img)
+        return self.discriminator(img)
 
 
 class GAN(nn.Module):
@@ -165,7 +159,6 @@ class GAN(nn.Module):
 def get_model(model_name: str):
     """
     Return a model based on the model name.
-    This follows the helper library pattern from the class guide.
     """
 
     if model_name == "CNN":
